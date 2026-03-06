@@ -1,4 +1,4 @@
-# Daily Dish 開発環境構築マニュアル (完全版：ディレクトリ構成・Vercelデプロイ対応)
+# Daily Dish 開発環境構築マニュアル (完全版：ローカル＆本番確認網羅)
 
 ## 1. プロジェクトの初期化
 
@@ -15,39 +15,34 @@ npm install -D @prisma/config prettier prettier-plugin-tailwindcss stylelint sty
 要件に基づいた各画面、ポップアップ、API、共通ロジックのフォルダを一括作成します。
 
 mkdir -p src/{app/{recipes,tools,shopping,api/{menus,recipes,stocks/{ingredients,tools},generate}},components/{common,overlays/{calendar,recipes,stocks,common},stocks,ui},hooks,lib,services,styles,types,utils}
+mkdir -p public/icons
 
 ### ディレクトリ構成イメージ
 
 src/
-├── app/ # ルーティング (App Router)
-│ ├── layout.tsx # PWA/共通Nav設定
-│ ├── globals.scss # Tailwind v4ベーススタイル
-│ ├── page.tsx # 献立カレンダー (/)
-│ ├── recipes/ # レシピ一覧 (/recipes)
-│ ├── tools/ # 材料・道具 (/tools)
-│ ├── shopping/ # 買い物リスト (/shopping)
-│ └── api/ # APIルート
-│ ├── menus/ # 献立操作API
-│ ├── recipes/ # レシピ操作API
-│ ├── stocks/ # 在庫管理API
-│ │ ├── ingredients/ # 材料操作
-│ │ └── tools/ # 道具操作
-│ └── generate/ # 献立自動生成API
-├── components/ # UIパーツ
-│ ├── common/ # Header, NavigationBarなど
-│ ├── overlays/ # 各種ポップアップ
-│ │ ├── calendar/ # カレンダー画面用ポップアップ
-│ │ ├── recipes/ # レシピ画面用ポップアップ
-│ │ ├── stocks/ # 在庫画面用ポップアップ
-│ │ └── common/ # 共通ポップアップ
-│ ├── stocks/ # 在庫一覧表示用パーツ
-│ └── ui/ # ボタン等の汎用パーツ
-├── hooks/ # カスタムフック
-├── lib/ # prisma.tsなど外部ツール設定
-├── services/ # menuGenerator.ts (自動生成ロジック)
-├── styles/ # \_variables.scss, \_mixins.scss
-├── types/ # TypeScript型定義
-└── utils/ # 判定ロジック等共通ユーティリティ
+├── app/
+│ ├── layout.tsx
+│ ├── globals.scss
+│ ├── page.tsx
+│ ├── recipes/
+│ ├── tools/
+│ ├── shopping/
+│ └── api/
+│ ├── menus/
+│ ├── recipes/
+│ ├── stocks/
+│ └── generate/
+├── components/
+│ ├── common/
+│ ├── overlays/
+│ ├── stocks/
+│ └── ui/
+├── hooks/
+├── lib/
+├── services/
+├── styles/
+├── types/
+└── utils/
 
 ## 3. スタイル設定 (src/app/globals.scss)
 
@@ -68,7 +63,7 @@ padding-bottom: env(safe-area-inset-bottom);
 }
 }
 
-## 4. データベース設定 (Supabase & Prisma 7)
+## 4. データベース設定 (Supabase & Prisma)
 
 ### .env
 
@@ -171,19 +166,24 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient }
 export const prisma = globalForPrisma.prisma || new PrismaClient({ log: ['query'] })
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-## 6. PWA & 共通レイアウト設定
+## 6. ビルド設定とPWA設定
 
-### next.config.ts
+### package.json (scriptsの修正)
 
-import type { NextConfig } from "next";
-const withPWA = require("next-pwa")({
-dest: "public",
-disable: process.env.NODE_ENV === "development",
-register: true,
-skipWaiting: true,
-});
-const nextConfig: NextConfig = {};
-export default withPWA(nextConfig);
+"scripts": {
+"dev": "next dev",
+"build": "next build",
+"start": "next start",
+"lint": "next lint",
+"postinstall": "prisma generate"
+}
+
+### public/icons への画像配置
+
+public/icons/ ディレクトリ内に以下を用意してください。
+
+- icon-192x192.png
+- icon-512x512.png
 
 ### public/manifest.json
 
@@ -200,6 +200,20 @@ export default withPWA(nextConfig);
 { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png" }
 ]
 }
+
+### next.config.ts
+
+import type { NextConfig } from "next";
+const withPWA = require("next-pwa")({
+dest: "public",
+disable: process.env.NODE_ENV === "development",
+register: true,
+skipWaiting: true,
+});
+const nextConfig: NextConfig = {
+turbopack: {}
+};
+export default withPWA(nextConfig);
 
 ### src/app/layout.tsx
 
@@ -227,16 +241,15 @@ return (
 );
 }
 
-## 7. ESLint / Stylelint / VS Code 連携 (保存時自動修正)
+## 7. ESLint / Stylelint / VS Code 連携
 
 ### eslint.config.mjs
 
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { FlatCompat } from '@eslint/eslintrc'
-const **filename = fileURLToPath(import.meta.url)
-const **dirname = dirname(**filename)
-const compat = new FlatCompat({ baseDirectory: **dirname })
+
+const compat = new FlatCompat({ baseDirectory: dirname(fileURLToPath(import.meta.url)) })
 const eslintConfig = [
 ...compat.extends('next/core-web-vitals', 'next/typescript', 'prettier'),
 { ignores: ['.next/**', 'out/**', 'build/**', 'next-env.d.ts'] },
@@ -284,38 +297,28 @@ export default eslintConfig
 "stylelint.validate": ["css", "scss", "postcss"]
 }
 
-## 8. Vercel デプロイと疎通確認
+## 8. ローカル環境の確認事項
 
-### 8.1 GitHubへのプッシュ
+1. DB閲覧の確認:
+   ターミナルで以下を実行し、ブラウザでPrisma Studioが開いてテーブル一覧が見れるか確認します。
+   export $(grep -v '^#' .env | xargs) && DATABASE_URL=$DIRECT_URL npx prisma studio
 
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin [ご自身のGitHubリポジトリURL]
-git push -u origin main
+2. 起動と自動修正の確認:
+   ターミナルで npm run dev を実行し、ブラウザで http://localhost:3000 にアクセスして画面が表示されるか確認します。また、VS Codeでファイルを保存した際にPrettier/Stylelintが機能しているか確認します。
 
-### 8.2 Vercelでのプロジェクト設定
+## 9. Vercel デプロイと本番DB疎通確認
 
-1. Vercelダッシュボードにログインし、「Add New...」から「Project」を選択。
-2. GitHubからプッシュしたリポジトリをImport。
-3. Framework Presetが「Next.js」になっていることを確認。
+### 9.1 GitHubへのプッシュとVercel設定
 
-### 8.3 環境変数の設定 (Environment Variables)
+1. GitHubへプッシュし、Vercelのダッシュボードからリポジトリをインポートします。
+2. Environment Variablesに以下を設定します。
 
-Supabaseの接続情報をVercelに設定します。
+- DATABASE_URL: postgres://... (ポート6543)
+- DIRECT_URL: postgres://... (ポート5432)
 
-- DATABASE_URL: postgres://... (ポート6543のConnection Pooling URL)
-- DIRECT_URL: postgres://... (ポート5432のDirect URL)
+### 9.2 デプロイと本番での確認
 
-### 8.4 ビルドコマンドの上書き (Build and Output Settings)
-
-Prismaのクライアントをビルド時に生成させるため、Build Commandを上書きします。
-
-- Build Command: npx prisma generate && next build
-
-### 8.5 デプロイと確認
-
-1. 「Deploy」ボタンをクリックしてビルドを開始します。
-2. デプロイ完了後、発行されたURLにアクセスし、画面が白紙エラーにならず表示されるか確認します。
-3. PCのChrome等でURLバーの右側に「インストール」アイコンが表示されれば、PWAの設定も無事に本番環境で機能しています。
+1. VercelでDeployを実行します。(ビルドコマンドはデフォルトのままでOKです)
+2. デプロイ完了後、発行されたURLにアクセスして画面が表示されるか確認します。
+3. インストールアイコンの確認: URLバー右側にPWAのインストールアイコンが出ているか確認します。
+4. 本番DB疎通確認: Vercelのプロジェクトダッシュボードの「Logs」タブを開き、ランタイムエラーが出ていないか確認します。画面が正常に表示されていれば、ビルド時のPrisma GenerateおよびDB接続は成功しています。(今後のAPI実装完了時に、実際のデータ取得テストを行います)
