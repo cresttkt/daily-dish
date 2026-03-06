@@ -15,5 +15,6 @@
     "*.css": "scss"
   },
   "prettier.requireConfig": true,
-  "stylelint.validate": ["css", "scss", "postcss"]
+  "stylelint.validate": ["css", "scss", "postcss"],
+  "editor.tabSize": 2
 }
