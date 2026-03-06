@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+datasource db {
+  provider = "postgresql"
+}
+
+model Menu {
+  date       String @db.Char(8)
+  meals_id   Int
+  recipes_id Int
+  recipe     Recipe @relation(fields: [recipes_id], references: [id])
+  @@id([date, meals_id, recipes_id])
+  @@map("menus")
+}
+model Recipe {
+  id          Int                @id @default(autoincrement())
+  name        String             @db.VarChar(255)
+  category    String             @db.Char(1)
+  image       String?            @db.VarChar(255)
+  how_to_make Json?
+  tags        RecipeTag[]
+  ingredients RecipeIngredient[]
+  tools       RecipeTool[]
+  menus       Menu[]
+  @@map("recipes")
+}
+model Tag {
+  id      Int         @id @default(autoincrement())
+  name    String      @db.VarChar(255)
+  recipes RecipeTag[]
+  @@map("tags")
+}
+model Tool {
+  id       Int          @id @default(autoincrement())
+  name     String       @db.VarChar(255)
+  quantity String       @default("0") @db.Char(1)
+  recipes  RecipeTool[]
+  @@map("tools")
+}
+model Ingredient {
+  id       Int                @id @default(autoincrement())
+  name     String             @db.VarChar(255)
+  quantity String             @default("0") @db.Char(1)
+  recipes  RecipeIngredient[]
+  @@map("ingredients")
+}
+model RecipeTag {
+  recipes_id Int
+  tags_id    Int
+  recipe     Recipe @relation(fields: [recipes_id], references: [id])
+  tag        Tag    @relation(fields: [tags_id], references: [id])
+  @@id([recipes_id, tags_id])
+  @@map("recipes_tags")
+}
+model RecipeIngredient {
+  recipes_id     Int
+  ingredients_id Int
+  recipe         Recipe     @relation(fields: [recipes_id], references: [id])
+  ingredient     Ingredient @relation(fields: [ingredients_id], references: [id])
+  @@id([recipes_id, ingredients_id])
+  @@map("recipes_ingredients")
+}
+model RecipeTool {
+  recipes_id Int
+  tools_id   Int
+  recipe     Recipe @relation(fields: [recipes_id], references: [id])
+  tool       Tool   @relation(fields: [tools_id], references: [id])
+  @@id([recipes_id, tools_id])
+  @@map("recipes_tools")
+}
