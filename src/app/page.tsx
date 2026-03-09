@@ -15,18 +15,23 @@ import {
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useSwipeable } from 'react-swipeable';
-// エイリアス（@/）を使ったインポート
 import MainButton from '@/components/ui/MainButton';
 import SecondButton from '@/components/ui/SecondButton';
+import MealConfirmPopup from '@/components/overlays/calendar/MealConfirmPopup';
 
-const dummyMeals: Record<string, string[]> = {
-  '2025-11-01': ['朝食', '昼食', '夕食'],
-  '2025-11-02': ['朝食'],
-  '2025-11-08': ['昼食', '夕食'],
+// --- カレンダーマス用のダミーデータ取得ロジック ---
+// ポップアップ側の getMockData と条件を合わせて連動させます
+const getMealTagsForDate = (date: Date) => {
+  const day = date.getDate();
+  if (day === 1 || day === 15 || day === 25) {
+    return ['朝食', '昼食', '夕食'];
+  }
+  return [];
 };
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
@@ -49,17 +54,15 @@ export default function CalendarPage() {
 
   const weekDays = ['月', '火', '水', '木', '金', '土', '日'];
 
-  const handleDayClick = (date: Date) => {
-    alert(`${format(date, 'yyyy年MM月dd日')} の献立ポップアップを開きます`);
-  };
-
-  const handleAutoGenerateClick = () => {
+  const handleDayClick = (date: Date) => setSelectedDate(date);
+  const handleClosePopup = () => setSelectedDate(null);
+  const handleEditMeal = () => alert('献立編集ポップアップを開きます');
+  const handleAutoGenerateClick = () =>
     alert('献立自動生成ポップアップを開きます');
-  };
 
   return (
-    <div className="flex min-h-full flex-col bg-white" {...handlers}>
-      {/*_ 1. カレンダー操作ヘッダー _*/}
+    <div className="relative flex min-h-full flex-col bg-white" {...handlers}>
+      {/* 1. カレンダー操作ヘッダー */}
       <div className="bg-thin-gray flex items-center justify-between px-4 py-3">
         <div className="flex flex-1 justify-start">
           <SecondButton label="Today" onClick={resetToToday} />
@@ -121,7 +124,9 @@ export default function CalendarPage() {
           else if (dayOfWeek === 0) textColor = 'text-red-500';
 
           const bgColor = isTodayDate ? 'bg-[#f0f9f0]' : 'bg-white';
-          const dailyMeals = dummyMeals[dateStr] || [];
+
+          // 固定データではなく、日付を元にタグ配列を取得する
+          const dailyMeals = getMealTagsForDate(date);
 
           return (
             <div
@@ -155,6 +160,15 @@ export default function CalendarPage() {
           );
         })}
       </div>
+
+      {/* 4. ポップアップ呼び出し */}
+      {selectedDate && (
+        <MealConfirmPopup
+          date={selectedDate}
+          onClose={handleClosePopup}
+          onEdit={handleEditMeal}
+        />
+      )}
     </div>
   );
 }
