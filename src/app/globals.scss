@@ -1,12 +1,23 @@
 @import 'tailwindcss';
 
-@layer base {
-  html {
-    @apply h-full overflow-hidden bg-gray-50 text-gray-900;
-  }
+/* 共通カラーパレットの定義 */
+@theme {
+  --color-main-green: #696;
+  --color-dark-green: #164716;
+  --color-main-font: #555;
+  --color-normal-gray: #d9d9d9;
+  --color-thin-gray: #f5f5f5;
+  --color-white: #fff;
+  --color-breakfast: #ffe1e1;
+  --color-lunch: #fff2dd;
+  --color-dinner: #f1edff;
+}
 
+@layer base {
+  html,
   body {
-    @apply h-full overflow-hidden bg-gray-50 text-gray-900;
+    /* 定義したカラーを使用して背景と基本文字色を設定 */
+    @apply bg-thin-gray text-main-font h-full overflow-hidden;
 
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
