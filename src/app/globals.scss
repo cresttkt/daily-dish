@@ -1,6 +1,5 @@
 @import 'tailwindcss';
 
-/* 共通カラーパレットの定義 */
 @theme {
   --color-main-green: #696;
   --color-dark-green: #164716;
@@ -16,7 +15,6 @@
 @layer base {
   html,
   body {
-    /* 定義したカラーを使用して背景と基本文字色を設定 */
     @apply bg-thin-gray text-main-font h-full overflow-hidden;
 
     overscroll-behavior: none;
@@ -57,5 +55,18 @@
 
   .animate-slide-out-right {
     animation: slide-out-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /*
+    ネイティブのdate
+    inputのアイコンを透明化して全体をクリック可能にする
+    */
+  .custom-date-input::-webkit-calendar-picker-indicator {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    opacity: 0;
   }
 }
