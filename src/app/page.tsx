@@ -18,28 +18,44 @@ import { useSwipeable } from 'react-swipeable';
 import MainButton from '@/components/ui/MainButton';
 import SecondButton from '@/components/ui/SecondButton';
 import MealConfirmPopup from '@/components/overlays/calendar/MealConfirmPopup';
+import MealEditPopup, {
+  DailyMealData,
+} from '@/components/overlays/calendar/MealEditPopup';
 
-// --- カレンダーマス用のダミーデータ取得ロジック ---
-// ポップアップ側の getMockData と条件を合わせて連動させます
-const getMealTagsForDate = (date: Date) => {
-  const day = date.getDate();
-  if (day === 1 || day === 15 || day === 25) {
-    return ['朝食', '昼食', '夕食'];
-  }
-  return [];
+const getInitialDB = () => {
+  const db: Record<string, DailyMealData> = {};
+  const currentMonth = format(new Date(), 'yyyy-MM');
+  const dummyMeals: DailyMealData = {
+    breakfast: [
+      { category: '主食', name: '白ご飯', image: '', tags: ['簡単'] },
+      { category: '主菜', name: '鮭の塩焼き', image: '', tags: ['簡単'] },
+    ],
+    lunch: [
+      { category: '主食', name: 'チャーハン', image: '', tags: ['時短'] },
+    ],
+    dinner: [],
+  };
+  db[`${currentMonth}-01`] = dummyMeals;
+  db[`${currentMonth}-15`] = dummyMeals;
+  db[`${currentMonth}-25`] = dummyMeals;
+  return db;
 };
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const [mealDB, setMealDB] =
+    useState<Record<string, DailyMealData>>(getInitialDB());
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const resetToToday = () => setCurrentDate(new Date());
 
   const handlers = useSwipeable({
-    onSwipedLeft: () => nextMonth(),
-    onSwipedRight: () => prevMonth(),
+    onSwipedLeft: nextMonth,
+    onSwipedRight: prevMonth,
     preventScrollOnSwipe: true,
     trackMouse: true,
   });
@@ -51,23 +67,29 @@ export default function CalendarPage() {
 
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
   const weeksCount = calendarDays.length / 7;
-
   const weekDays = ['月', '火', '水', '木', '金', '土', '日'];
 
-  const handleDayClick = (date: Date) => setSelectedDate(date);
-  const handleClosePopup = () => setSelectedDate(null);
-  const handleEditMeal = () => alert('献立編集ポップアップを開きます');
-  const handleAutoGenerateClick = () =>
-    alert('献立自動生成ポップアップを開きます');
+  const selectedDateStr = selectedDate
+    ? format(selectedDate, 'yyyy-MM-dd')
+    : '';
+  const currentMealData = mealDB[selectedDateStr] || {
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+  };
+
+  const handleSaveMeal = (updatedData: DailyMealData) => {
+    setMealDB((prev) => ({ ...prev, [selectedDateStr]: updatedData }));
+    setIsEditing(false);
+    setSelectedDate(null);
+  };
 
   return (
     <div className="relative flex min-h-full flex-col bg-white" {...handlers}>
-      {/* 1. カレンダー操作ヘッダー */}
       <div className="bg-thin-gray flex items-center justify-between px-4 py-3">
         <div className="flex flex-1 justify-start">
           <SecondButton label="Today" onClick={resetToToday} />
         </div>
-
         <div className="flex flex-1 items-center justify-center space-x-2">
           <button
             onClick={prevMonth}
@@ -85,17 +107,15 @@ export default function CalendarPage() {
             ▶
           </button>
         </div>
-
         <div className="flex flex-1 justify-end">
           <MainButton
             label="自動生成"
             iconSrc="/icons/icon_meal.png"
-            onClick={handleAutoGenerateClick}
+            onClick={() => alert('自動生成')}
           />
         </div>
       </div>
 
-      {/* 2. 曜日ヘッダー */}
       <div className="bg-main-green grid grid-cols-7">
         {weekDays.map((day) => (
           <div
@@ -107,7 +127,6 @@ export default function CalendarPage() {
         ))}
       </div>
 
-      {/* 3. カレンダーグリッド本体 */}
       <div
         className="grid h-[64vh] grid-cols-7 bg-white"
         style={{ gridTemplateRows: `repeat(${weeksCount}, minmax(0, 1fr))` }}
@@ -125,26 +144,27 @@ export default function CalendarPage() {
 
           const bgColor = isTodayDate ? 'bg-[#f0f9f0]' : 'bg-white';
 
-          // 固定データではなく、日付を元にタグ配列を取得する
-          const dailyMeals = getMealTagsForDate(date);
+          const dailyData = mealDB[dateStr];
+          const tags = [];
+          if (dailyData?.breakfast?.length > 0) tags.push('朝食');
+          if (dailyData?.lunch?.length > 0) tags.push('昼食');
+          if (dailyData?.dinner?.length > 0) tags.push('夕食');
 
           return (
             <div
               key={dateStr}
-              onClick={() => handleDayClick(date)}
+              onClick={() => setSelectedDate(date)}
               className={`border-normal-gray flex flex-col items-center overflow-hidden border-r border-b p-[2px] ${bgColor} active:bg-thin-gray transition-colors`}
             >
               <span className={`text-[12px] font-bold ${textColor}`}>
                 {format(date, 'd')}
               </span>
-
               <div className="mt-1 flex w-full flex-col gap-[2px] px-[2px]">
-                {dailyMeals.map((meal) => {
+                {tags.map((meal) => {
                   let tagClass = '';
                   if (meal === '朝食') tagClass = 'bg-breakfast text-red-500';
                   if (meal === '昼食') tagClass = 'bg-lunch text-orange-500';
                   if (meal === '夕食') tagClass = 'bg-dinner text-blue-600';
-
                   return (
                     <div
                       key={meal}
@@ -161,12 +181,21 @@ export default function CalendarPage() {
         })}
       </div>
 
-      {/* 4. ポップアップ呼び出し */}
       {selectedDate && (
         <MealConfirmPopup
           date={selectedDate}
-          onClose={handleClosePopup}
-          onEdit={handleEditMeal}
+          mealData={currentMealData}
+          onClose={() => setSelectedDate(null)}
+          onEdit={() => setIsEditing(true)}
+        />
+      )}
+
+      {selectedDate && isEditing && (
+        <MealEditPopup
+          date={selectedDate}
+          initialData={currentMealData}
+          onClose={() => setIsEditing(false)}
+          onSave={handleSaveMeal}
         />
       )}
     </div>
