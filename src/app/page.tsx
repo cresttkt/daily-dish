@@ -21,6 +21,7 @@ import MealConfirmPopup from '@/components/overlays/calendar/MealConfirmPopup';
 import MealEditPopup, {
   DailyMealData,
 } from '@/components/overlays/calendar/MealEditPopup';
+import MealAutoGeneratePopup from '@/components/overlays/calendar/MealAutoGeneratePopup';
 
 const getInitialDB = () => {
   const db: Record<string, DailyMealData> = {};
@@ -43,8 +44,11 @@ const getInitialDB = () => {
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
+
+  // ポップアップの表示制御ステート
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
 
   const [mealDB, setMealDB] =
     useState<Record<string, DailyMealData>>(getInitialDB());
@@ -84,6 +88,14 @@ export default function CalendarPage() {
     setSelectedDate(null);
   };
 
+  const handleGeneratedMeal = (data: any) => {
+    // 実際はここでAPI等から生成されたデータを受け取って mealDB を一括更新します
+    alert(
+      `${data.period === '1day' ? '1日分' : '1週間分'}の献立を生成しました！\n(開始日: ${data.startDate})`,
+    );
+    setIsAutoGenerating(false);
+  };
+
   return (
     <div className="relative flex min-h-full flex-col bg-white" {...handlers}>
       <div className="bg-thin-gray flex items-center justify-between px-4 py-3">
@@ -108,10 +120,11 @@ export default function CalendarPage() {
           </button>
         </div>
         <div className="flex flex-1 justify-end">
+          {/* 自動生成ボタンの onClick に展開処理を付与 */}
           <MainButton
             label="自動生成"
             iconSrc="/icons/icon_meal.png"
-            onClick={() => alert('自動生成')}
+            onClick={() => setIsAutoGenerating(true)}
           />
         </div>
       </div>
@@ -181,6 +194,7 @@ export default function CalendarPage() {
         })}
       </div>
 
+      {/* 既存のポップアップ群 */}
       {selectedDate && (
         <MealConfirmPopup
           date={selectedDate}
@@ -189,13 +203,20 @@ export default function CalendarPage() {
           onEdit={() => setIsEditing(true)}
         />
       )}
-
       {selectedDate && isEditing && (
         <MealEditPopup
           date={selectedDate}
           initialData={currentMealData}
           onClose={() => setIsEditing(false)}
           onSave={handleSaveMeal}
+        />
+      )}
+
+      {/* 自動生成ポップアップ */}
+      {isAutoGenerating && (
+        <MealAutoGeneratePopup
+          onClose={() => setIsAutoGenerating(false)}
+          onGenerate={handleGeneratedMeal}
         />
       )}
     </div>
