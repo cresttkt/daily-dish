@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   format,
   addMonths,
@@ -23,35 +23,34 @@ import MealEditPopup, {
 } from '@/components/overlays/calendar/MealEditPopup';
 import MealAutoGeneratePopup from '@/components/overlays/calendar/MealAutoGeneratePopup';
 
-const getInitialDB = () => {
-  const db: Record<string, DailyMealData> = {};
-  const currentMonth = format(new Date(), 'yyyy-MM');
-  const dummyMeals: DailyMealData = {
-    breakfast: [
-      { category: '主食', name: '白ご飯', image: '', tags: ['簡単'] },
-      { category: '主菜', name: '鮭の塩焼き', image: '', tags: ['簡単'] },
-    ],
-    lunch: [
-      { category: '主食', name: 'チャーハン', image: '', tags: ['時短'] },
-    ],
-    dinner: [],
-  };
-  db[`${currentMonth}-01`] = dummyMeals;
-  db[`${currentMonth}-15`] = dummyMeals;
-  db[`${currentMonth}-25`] = dummyMeals;
-  return db;
-};
-
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // ポップアップの表示制御ステート
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
 
-  const [mealDB, setMealDB] =
-    useState<Record<string, DailyMealData>>(getInitialDB());
+  const [mealDB, setMealDB] = useState<Record<string, DailyMealData>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchMenus = async () => {
+      setIsLoading(true);
+      const monthStr = format(currentDate, 'yyyyMM');
+      try {
+        const res = await fetch(`/api/menus?month=${monthStr}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMealDB(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch menus', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchMenus();
+  }, [currentDate]);
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
@@ -68,7 +67,6 @@ export default function CalendarPage() {
   const monthEnd = endOfMonth(monthStart);
   const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
   const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
-
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
   const weeksCount = calendarDays.length / 7;
   const weekDays = ['月', '火', '水', '木', '金', '土', '日'];
@@ -82,14 +80,31 @@ export default function CalendarPage() {
     dinner: [],
   };
 
-  const handleSaveMeal = (updatedData: DailyMealData) => {
-    setMealDB((prev) => ({ ...prev, [selectedDateStr]: updatedData }));
-    setIsEditing(false);
-    setSelectedDate(null);
+  const handleSaveMeal = async (updatedData: DailyMealData) => {
+    try {
+      const res = await fetch('/api/menus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedDateStr,
+          data: updatedData,
+        }),
+      });
+
+      if (res.ok) {
+        setMealDB((prev) => ({ ...prev, [selectedDateStr]: updatedData }));
+        setIsEditing(false);
+        setSelectedDate(null);
+      } else {
+        alert('保存に失敗しました');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('通信エラーが発生しました');
+    }
   };
 
   const handleGeneratedMeal = (data: any) => {
-    // 実際はここでAPI等から生成されたデータを受け取って mealDB を一括更新します
     alert(
       `${data.period === '1day' ? '1日分' : '1週間分'}の献立を生成しました！\n(開始日: ${data.startDate})`,
     );
@@ -120,7 +135,6 @@ export default function CalendarPage() {
           </button>
         </div>
         <div className="flex flex-1 justify-end">
-          {/* 自動生成ボタンの onClick に展開処理を付与 */}
           <MainButton
             label="自動生成"
             iconSrc="/icons/icon_meal.png"
@@ -141,9 +155,15 @@ export default function CalendarPage() {
       </div>
 
       <div
-        className="grid h-[64vh] grid-cols-7 bg-white"
+        className="relative grid h-[64vh] grid-cols-7 bg-white"
         style={{ gridTemplateRows: `repeat(${weeksCount}, minmax(0, 1fr))` }}
       >
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50">
+            <div className="border-normal-gray border-t-main-green h-8 w-8 animate-spin rounded-full border-4"></div>
+          </div>
+        )}
+
         {calendarDays.map((date) => {
           const dateStr = format(date, 'yyyy-MM-dd');
           const isCurrentMonth = isSameMonth(date, currentDate);
@@ -156,7 +176,6 @@ export default function CalendarPage() {
           else if (dayOfWeek === 0) textColor = 'text-red-500';
 
           const bgColor = isTodayDate ? 'bg-[#f0f9f0]' : 'bg-white';
-
           const dailyData = mealDB[dateStr];
           const tags = [];
           if (dailyData?.breakfast?.length > 0) tags.push('朝食');
@@ -167,7 +186,7 @@ export default function CalendarPage() {
             <div
               key={dateStr}
               onClick={() => setSelectedDate(date)}
-              className={`border-normal-gray flex flex-col items-center overflow-hidden border-r border-b p-[2px] ${bgColor} active:bg-thin-gray transition-colors`}
+              className={`border-normal-gray flex flex-col items-center overflow-hidden border-r border-b p-[2px] ${bgColor} active:bg-thin-gray cursor-pointer transition-colors`}
             >
               <span className={`text-[12px] font-bold ${textColor}`}>
                 {format(date, 'd')}
@@ -194,7 +213,6 @@ export default function CalendarPage() {
         })}
       </div>
 
-      {/* 既存のポップアップ群 */}
       {selectedDate && (
         <MealConfirmPopup
           date={selectedDate}
@@ -211,8 +229,6 @@ export default function CalendarPage() {
           onSave={handleSaveMeal}
         />
       )}
-
-      {/* 自動生成ポップアップ */}
       {isAutoGenerating && (
         <MealAutoGeneratePopup
           onClose={() => setIsAutoGenerating(false)}
