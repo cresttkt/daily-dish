@@ -104,11 +104,21 @@ export default function CalendarPage() {
     }
   };
 
-  const handleGeneratedMeal = (data: any) => {
-    alert(
-      `${data.period === '1day' ? '1日分' : '1週間分'}の献立を生成しました！\n(開始日: ${data.startDate})`,
-    );
+  const handleGeneratedMeal = async () => {
     setIsAutoGenerating(false);
+    setIsLoading(true);
+    const monthStr = format(currentDate, 'yyyyMM');
+    try {
+      const res = await fetch(`/api/menus?month=${monthStr}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMealDB(data); // カレンダーの表示が最新に更新されます！
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

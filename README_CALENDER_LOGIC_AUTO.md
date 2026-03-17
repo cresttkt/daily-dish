@@ -1,3 +1,113 @@
+# 献立カレンダー 自動生成ロジック 実装手順書（元デザイン維持・パス修正・アラート廃止版）
+
+## STEP 1: 自動生成APIの作成 (src/app/api/generate/route.ts)
+
+ご指定いただいた正規のディレクトリに配置します。UI側の「除外日」と「必須レシピ」に対応させた自動生成の頭脳となるAPIです。
+`src/app/api/generate/route.ts` を新規作成（または上書き）し、以下のコードを記述してください。
+
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { addDays, format } from 'date-fns';
+
+const TARGET_MEALS = ['breakfast', 'lunch', 'dinner'];
+const MEAL_ID_MAP: Record<string, number> = { 'breakfast': 1, 'lunch': 2, 'dinner': 3 };
+
+const MEAL_RULES: Record<string, Record<string, number>> = {
+breakfast: { '1': 1, '2': 1, '4': 0 },
+lunch: { '1': 1, '2': 1, '4': 1 },
+dinner: { '1': 1, '2': 1, '3': 2, '4': 1 }
+};
+
+function calculateScore(recipe: any, usedRecipeIds: Set<number>, mustIncludeIds: Set<number>): number {
+let score = 0;
+if (mustIncludeIds.has(recipe.id)) score += 1000;
+if (usedRecipeIds.has(recipe.id)) score -= 500;
+return score;
+}
+
+export async function POST(request: NextRequest) {
+try {
+const { startDate, period, mustIncludeRecipeIds = [], excludeDates = [] } = await request.json();
+
+    const daysCount = period === '1week' ? 7 : 1;
+    const start = new Date(startDate);
+
+    const targetDates: string[] = [];
+    for (let i = 0; i < daysCount; i++) {
+      const d = addDays(start, i);
+      const dateDash = format(d, 'yyyy-MM-dd'); // フロントエンドから来る除外日フォーマット
+      const dateDb = format(d, 'yyyyMMdd');     // DB保存用フォーマット
+
+      // UIで設定された「除外日」に含まれていない日付だけを生成対象にする
+      if (!excludeDates.includes(dateDash)) {
+        targetDates.push(dateDb);
+      }
+    }
+
+    const allRecipes = await prisma.recipe.findMany();
+    const existingMenus = await prisma.menu.findMany({ where: { date: { in: targetDates } } });
+
+    const usedRecipeIds = new Set<number>();
+    const mustIncludeIds = new Set<number>(mustIncludeRecipeIds.map(Number));
+
+    existingMenus.forEach(m => usedRecipeIds.add(m.recipes_id));
+
+    const newMenusToSave: any[] = [];
+
+    for (const dateStr of targetDates) {
+      const dailyExisting = existingMenus.filter(m => m.date === dateStr);
+
+      for (const mealType of TARGET_MEALS) {
+        const mealId = MEAL_ID_MAP[mealType];
+        const existingInThisMeal = dailyExisting.filter(m => m.meals_id === mealId);
+        const rules = MEAL_RULES[mealType];
+
+        for (const [categoryId, requiredCount] of Object.entries(rules)) {
+          const existingCount = existingInThisMeal.filter(m => {
+            const recipe = allRecipes.find(r => r.id === m.recipes_id);
+            return recipe?.category === categoryId;
+          }).length;
+
+          const neededCount = requiredCount - existingCount;
+
+          if (neededCount > 0) {
+            const candidates = allRecipes.filter(r => r.category === categoryId);
+            const scoredCandidates = candidates.map(r => ({
+              recipe: r,
+              score: calculateScore(r, usedRecipeIds, mustIncludeIds)
+            })).sort((a, b) => {
+              if (b.score !== a.score) return b.score - a.score;
+              return Math.random() - 0.5;
+            });
+
+            for (let i = 0; i < neededCount && i < scoredCandidates.length; i++) {
+              const selectedRecipe = scoredCandidates[i].recipe;
+              newMenusToSave.push({ date: dateStr, meals_id: mealId, recipes_id: selectedRecipe.id });
+              usedRecipeIds.add(selectedRecipe.id);
+              mustIncludeIds.delete(selectedRecipe.id);
+            }
+          }
+        }
+      }
+    }
+
+    if (newMenusToSave.length > 0) {
+      await prisma.menu.createMany({ data: newMenusToSave });
+    }
+
+    return NextResponse.json({ success: true, count: newMenusToSave.length });
+
+} catch (error) {
+console.error('Generate API Error:', error);
+return NextResponse.json({ error: 'Failed to generate menus' }, { status: 500 });
+}
+}
+
+## STEP 2: 自動生成UIの作成 (src/components/overlays/calendar/MealAutoGeneratePopup.tsx)
+
+通信先を確実にご指定の `/api/generate` に変更し、完了時の `alert` を削除してシームレスに閉じるように変更しました。
+`src/components/overlays/calendar/MealAutoGeneratePopup.tsx` を以下のコードで「完全に上書き」してください。
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -9,117 +119,119 @@ import SelectBox from '@/components/ui/SelectBox';
 import MiniButton from '@/components/ui/MiniButton';
 
 type Props = {
-  onClose: () => void;
-  onGenerate: (data: any) => void;
+onClose: () => void;
+onGenerate: (data: any) => void;
 };
 
 export default function MealAutoGeneratePopup({ onClose, onGenerate }: Props) {
-  const [isClosing, setIsClosing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+const [isClosing, setIsClosing] = useState(false);
+const [isLoading, setIsLoading] = useState(false);
 
-  // --- フォームステート ---
-  const [period, setPeriod] = useState<'1day' | '1week'>('1day');
-  const [startDate, setStartDate] = useState('');
-  const [excludeDates, setExcludeDates] = useState<string[]>([]);
+// --- フォームステート ---
+const [period, setPeriod] = useState<'1day' | '1week'>('1day');
+const [startDate, setStartDate] = useState('');
+const [excludeDates, setExcludeDates] = useState<string[]>([]);
 
-  const [requiredCategory, setRequiredCategory] = useState('主食');
-  const [requiredRecipe, setRequiredRecipe] = useState('');
-  const [requiredRecipesList, setRequiredRecipesList] = useState<
-    { category: string; recipe: string }[]
-  >([]);
+const [requiredCategory, setRequiredCategory] = useState('主食');
+const [requiredRecipe, setRequiredRecipe] = useState('');
+const [requiredRecipesList, setRequiredRecipesList] = useState<
+{ category: string; recipe: string }[]
 
-  // DBから取得したレシピを格納するステート
-  const [availableRecipes, setAvailableRecipes] = useState<any[]>([]);
+> ([]);
 
-  // --- エラー制御 ---
-  const [dateError, setDateError] = useState('');
-  const [recipeError, setRecipeError] = useState('');
-  const [generateError, setGenerateError] = useState('');
+// DBから取得したレシピを格納するステート
+const [availableRecipes, setAvailableRecipes] = useState<any[]>([]);
 
-  // DBから実際のレシピ一覧を取得
-  useEffect(() => {
-    const fetchRecipes = async () => {
-      try {
-        const res = await fetch('/api/recipes');
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableRecipes(data.recipes || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch recipes', err);
-      }
-    };
-    fetchRecipes();
-  }, []);
+// --- エラー制御 ---
+const [dateError, setDateError] = useState('');
+const [recipeError, setRecipeError] = useState('');
+const [generateError, setGenerateError] = useState('');
 
-  // startDateを起点に1週間分の日付リストを生成
-  const weekDates = useMemo(() => {
-    if (!startDate) return [];
-    const start = parseISO(startDate);
-    if (!isValid(start)) return [];
-    return Array.from({ length: 7 }).map((_, i) => {
-      const d = addDays(start, i);
-      return {
-        value: format(d, 'yyyy-MM-dd'),
-        label: format(d, 'M/d(E)', { locale: ja }),
-      };
-    });
-  }, [startDate]);
+// DBから実際のレシピ一覧を取得
+useEffect(() => {
+const fetchRecipes = async () => {
+try {
+const res = await fetch('/api/recipes');
+if (res.ok) {
+const data = await res.json();
+setAvailableRecipes(data.recipes || []);
+}
+} catch (err) {
+console.error("Failed to fetch recipes", err);
+}
+};
+fetchRecipes();
+}, []);
 
-  // DBから取得した availableRecipes で絞り込む
-  const filteredRecipes = useMemo(() => {
-    return availableRecipes
-      .filter((r) => r.category === requiredCategory)
-      .map((r) => ({ value: r.name, label: r.name }));
-  }, [availableRecipes, requiredCategory]);
+// startDateを起点に1週間分の日付リストを生成
+const weekDates = useMemo(() => {
+if (!startDate) return [];
+const start = parseISO(startDate);
+if (!isValid(start)) return [];
+return Array.from({ length: 7 }).map((\_, i) => {
+const d = addDays(start, i);
+return {
+value: format(d, 'yyyy-MM-dd'),
+label: format(d, 'M/d(E)', { locale: ja }),
+};
+});
+}, [startDate]);
 
-  const handleToggleExclude = (dateValue: string) => {
-    setExcludeDates((prev) =>
-      prev.includes(dateValue)
-        ? prev.filter((v) => v !== dateValue)
-        : [...prev, dateValue],
-    );
-  };
+// DBから取得した availableRecipes で絞り込む
+const filteredRecipes = useMemo(() => {
+return availableRecipes.filter((r) => r.category === requiredCategory).map(
+(r) => ({ value: r.name, label: r.name }),
+);
+}, [availableRecipes, requiredCategory]);
 
-  const handleAddRequiredRecipe = () => {
-    if (!requiredRecipe) {
-      setRecipeError('レシピを選択してください');
-      return;
-    }
-    setRequiredRecipesList((prev) => [
-      ...prev,
-      { category: requiredCategory, recipe: requiredRecipe },
-    ]);
-    setRequiredRecipe('');
-    setRecipeError('');
-  };
+const handleToggleExclude = (dateValue: string) => {
+setExcludeDates((prev) =>
+prev.includes(dateValue)
+? prev.filter((v) => v !== dateValue)
+: [...prev, dateValue],
+);
+};
 
-  const handleRemoveRequiredRecipe = (index: number) => {
-    setRequiredRecipesList((prev) => prev.filter((_, i) => i !== index));
-  };
+const handleAddRequiredRecipe = () => {
+if (!requiredRecipe) {
+setRecipeError('レシピを選択してください');
+return;
+}
+setRequiredRecipesList((prev) => [
+...prev,
+{ category: requiredCategory, recipe: requiredRecipe },
+]);
+setRequiredRecipe('');
+setRecipeError('');
+};
 
-  // 実際のAPIにデータを送信する処理
-  const handleGenerateClick = async () => {
-    if (!startDate) {
-      setDateError(
-        `${period === '1day' ? '対象日' : '開始日'}を選択してください`,
-      );
-      setGenerateError('日付が未選択です');
-      return;
-    }
-    setDateError('');
-    setGenerateError('');
-    setIsLoading(true);
+const handleRemoveRequiredRecipe = (index: number) => {
+setRequiredRecipesList((prev) => prev.filter((\_, i) => i !== index));
+};
+
+// 実際のAPIにデータを送信する処理
+const handleGenerateClick = async () => {
+if (!startDate) {
+setDateError(
+`${period === '1day' ? '対象日' : '開始日'}を選択してください`,
+);
+setGenerateError('日付が未選択です');
+return;
+}
+setDateError('');
+setGenerateError('');
+setIsLoading(true);
 
     try {
       // 画面上のレシピ名から、DBのIDに変換する
       const mustIncludeRecipeIds = requiredRecipesList
-        .map((req) => {
-          const found = availableRecipes.find((r) => r.name === req.recipe);
+        .map(req => {
+          const found = availableRecipes.find(r => r.name === req.recipe);
           return found ? found.id : null;
         })
-        .filter((id) => id !== null);
+        .filter(id => id !== null);
 
+      // ★ 修正箇所：正しいエンドポイントへリクエスト
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,46 +239,45 @@ export default function MealAutoGeneratePopup({ onClose, onGenerate }: Props) {
           startDate,
           period,
           excludeDates, // 追加要件の除外日も送信
-          mustIncludeRecipeIds,
-        }),
+          mustIncludeRecipeIds
+        })
       });
 
       if (res.ok) {
         const result = await res.json();
-        alert(`${result.count}件の献立を自動生成しました！`);
+        // アラートを廃止し、そのままシームレスに閉じる処理へ
         setIsClosing(true);
-        // カレンダー画面に更新を促す
         onGenerate(result);
       } else {
-        setGenerateError('自動生成に失敗しました');
+        setGenerateError("自動生成に失敗しました");
       }
     } catch (err) {
       console.error(err);
-      setGenerateError('通信エラーが発生しました');
+      setGenerateError("通信エラーが発生しました");
     } finally {
       setIsLoading(false);
     }
-  };
 
-  const handleCloseClick = () => setIsClosing(true);
-  const handleAnimationEnd = () => {
-    if (isClosing) onClose();
-  };
+};
 
-  return (
-    <div
-      className={`fixed top-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 z-[70] flex flex-col bg-white shadow-lg ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}
-      onAnimationEnd={handleAnimationEnd}
-    >
-      {/* 生成中ローダー */}
-      {isLoading && (
-        <div className="absolute inset-0 z-[80] flex flex-col items-center justify-center bg-white/60">
-          <div className="border-normal-gray border-t-main-green h-10 w-10 animate-spin rounded-full border-4"></div>
-          <p className="text-main-green mt-3 text-[12px] font-bold">
-            献立を生成中...
-          </p>
-        </div>
-      )}
+const handleCloseClick = () => setIsClosing(true);
+const handleAnimationEnd = () => {
+if (isClosing) onClose();
+};
+
+return (
+<div
+className={`fixed top-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 z-[70] flex flex-col bg-white shadow-lg ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}
+onAnimationEnd={handleAnimationEnd} >
+{/_ 生成中ローダー _/}
+{isLoading && (
+<div className="absolute inset-0 z-[80] flex flex-col items-center justify-center bg-white/60">
+<div className="border-normal-gray border-t-main-green h-10 w-10 animate-spin rounded-full border-4"></div>
+<p className="text-main-green mt-3 text-[12px] font-bold">
+献立を生成中...
+</p>
+</div>
+)}
 
       {/* ポップアップ内ヘッダー */}
       <div className="border-normal-gray relative z-10 flex h-14 shrink-0 items-center border-b bg-white px-4">
@@ -400,5 +511,46 @@ export default function MealAutoGeneratePopup({ onClose, onGenerate }: Props) {
         </button>
       </div>
     </div>
-  );
+
+);
 }
+
+## STEP 3: カレンダーTOP画面の連携 (src/app/page.tsx)
+
+自動生成が完了した後に、カレンダーのデータを再取得して表示をシームレスに更新する処理です。
+`src/app/page.tsx` の該当部分を以下のように修正してください。
+
+// 修正後：自動生成完了時にデータを再取得する（アラートなし）
+const handleGeneratedMeal = async () => {
+setIsAutoGenerating(false);
+setIsLoading(true);
+const monthStr = format(currentDate, 'yyyyMM');
+try {
+const res = await fetch(`/api/menus?month=${monthStr}`);
+if (res.ok) {
+const data = await res.json();
+setMealDB(data); // カレンダーの表示が最新に更新されます！
+}
+} catch (err) {
+console.error(err);
+} finally {
+setIsLoading(false);
+}
+};
+
+## STEP 4: 動作確認
+
+ファイルの保存が完了したら、ブラウザで以下の機能が意図通りに動くか確認してください。
+
+1. **カレンダー画面から自動生成を開く**
+   - カレンダー右上の「自動生成」ボタンを押下し、ポップアップを開きます。
+2. **必須レシピ機能とシームレスな更新のテスト**
+   - 期間「1日」のまま、本日の日付を選択します。
+   - 「必須レシピ」の分類とレシピ名を選択し、「追加する」ボタンを押してリストに登録します。
+   - 「生成する」ボタンを押下します。
+   - ローディングが終わると**ポップアップがアラート無しでスッと閉じ**、裏側のカレンダーに指定したレシピを含む献立が瞬時に反映されることを確認します。
+3. **除外日（スキップ）機能のテスト**
+   - 再度ポップアップを開き、期間を「1週」に変更します。
+   - 開始日を選択すると表示される「除外日」のチェックボックスをいくつか選択します。
+   - 「生成する」ボタンを押下します。
+   - 生成後、除外日に指定した日付には献立が追加されておらず、それ以外の日付には正しく自動生成が適用されているか確認します。
