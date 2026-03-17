@@ -120,6 +120,7 @@ export default function MealAutoGeneratePopup({ onClose, onGenerate }: Props) {
         })
         .filter((id) => id !== null);
 
+      // ★ 修正箇所：正しいエンドポイントへリクエスト
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,9 +134,8 @@ export default function MealAutoGeneratePopup({ onClose, onGenerate }: Props) {
 
       if (res.ok) {
         const result = await res.json();
-        alert(`${result.count}件の献立を自動生成しました！`);
+        // アラートを廃止し、そのままシームレスに閉じる処理へ
         setIsClosing(true);
-        // カレンダー画面に更新を促す
         onGenerate(result);
       } else {
         setGenerateError('自動生成に失敗しました');
