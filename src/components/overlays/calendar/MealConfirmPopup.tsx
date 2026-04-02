@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { DailyMealData } from './MealEditPopup';
+import RecipeDetailPopup from '@/components/overlays/recipes/RecipeDetailPopup';
 
 type Props = {
   date: Date;
@@ -19,6 +20,10 @@ export default function MealConfirmPopup({
   onEdit,
 }: Props) {
   const [isClosing, setIsClosing] = useState(false);
+
+  // ★追加：詳細ポップアップに渡すレシピIDのステート
+  const [detailRecipeId, setDetailRecipeId] = useState<string | null>(null);
+
   const dateStr = format(date, 'yyyy/MM/dd(E)', { locale: ja });
   const isEmpty =
     mealData.breakfast.length === 0 &&
@@ -53,8 +58,6 @@ export default function MealConfirmPopup({
   const handleAnimationEnd = () => {
     if (isClosing) onClose();
   };
-  const handleRecipeClick = (recipeName: string) =>
-    alert(`「${recipeName}」のレシピ詳細へ`);
 
   return (
     <div
@@ -106,7 +109,8 @@ export default function MealConfirmPopup({
                       return (
                         <div
                           key={idx}
-                          onClick={() => handleRecipeClick(item.name)}
+                          // ★修正：アラートではなく、レシピIDをステートにセットする
+                          onClick={() => setDetailRecipeId(String(item.id))}
                           className={`active:bg-thin-gray flex cursor-pointer items-center gap-3 transition-colors ${!isLast ? `mb-3 border-b-[1.5px] border-dotted pb-3 ${section.borderColor}` : ''}`}
                         >
                           <span className="border-normal-gray text-main-font shrink-0 rounded-sm border bg-white px-1 py-[2px] text-[10px] font-bold whitespace-nowrap">
@@ -156,6 +160,21 @@ export default function MealConfirmPopup({
           献立を編集する
         </button>
       </div>
+
+      {/* ★追加：レシピ詳細ポップアップの呼び出し */}
+      {detailRecipeId && (
+        <RecipeDetailPopup
+          recipeId={detailRecipeId}
+          onClose={() => setDetailRecipeId(null)}
+          onEdit={(id) => {
+            alert('編集機能はフェーズ4で実装します！');
+          }}
+          onDeleteSuccess={() => {
+            setDetailRecipeId(null);
+            // ※カレンダー側の再取得が必要な場合はここで親コンポーネントの関数を呼ぶなどしてください
+          }}
+        />
+      )}
     </div>
   );
 }
