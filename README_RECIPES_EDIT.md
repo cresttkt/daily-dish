@@ -3,7 +3,7 @@
 ## 概要
 
 レシピの新規登録および既存レシピの編集を行うポップアップ画面を作成します。
-材料ごとの分量設定に対応するためのデータベーススキーマ修正、初期データ投入、および共通UIモジュールを活用したデザインの統一を行います。
+材料ごとの分量設定に対応するためのデータベーススキーマ修正と、共通UIモジュールを活用したデザインの統一を行います。また、フェーズ1で作成したSupabase Storageへの画像アップロード機能を統合します。
 
 ## STEP 1: データベーススキーマの修正と型の更新
 
@@ -263,7 +263,7 @@ return NextResponse.json({ error: 'Failed to delete recipe' }, { status: 500 });
 
 ## STEP 5: レシピ詳細ポップアップの修正 (src/components/overlays/recipes/RecipeDetailPopup.tsx)
 
-データ構造の変更と改行表示（whitespace-pre-wrap）に対応させます。該当ファイルを以下の内容で完全に上書きしてください。
+該当ファイルを以下の内容で完全に上書きしてください。
 
 'use client';
 
@@ -450,7 +450,7 @@ onAnimationEnd={handleAnimationEnd} >
 
 ## STEP 6: レシピ編集・追加ポップアップの作成 (src/components/overlays/recipes/RecipeEditPopup.tsx)
 
-UIの挙動とボタンデザインをすべてご指定の要件に統一したコンポーネントです。
+フェーズ1で作成した画像アップロード関数を読み込み、Supabaseの公開URLを保存できるように修正したコンポーネントです。
 src/components/overlays/recipes/ 内に RecipeEditPopup.tsx を新規作成し、以下のコードを記述してください。
 
 'use client';
@@ -460,6 +460,8 @@ import RadioButton from '@/components/ui/RadioButton';
 import CheckboxButton from '@/components/ui/CheckboxButton';
 import SelectBox from '@/components/ui/SelectBox';
 import MiniButton from '@/components/ui/MiniButton';
+// ★追加: フェーズ1で作成した画像アップロード関数をインポート
+import { uploadRecipeImage } from '@/utils/uploadImage';
 
 type MasterData = {
 ingredients: { id: number; name: string }[];
@@ -483,6 +485,7 @@ export default function RecipeEditPopup({ recipeId, onClose, onSuccess }: Props)
 const [isClosing, setIsClosing] = useState(false);
 const [isLoading, setIsLoading] = useState(true);
 const [isSaving, setIsSaving] = useState(false);
+const [isUploadingImage, setIsUploadingImage] = useState(false);
 
 const [masters, setMasters] = useState<MasterData>({ ingredients: [], tools: [], tags: [] });
 
@@ -535,11 +538,27 @@ if (masterRes.ok) setMasters(await masterRes.json());
 const handleCloseClick = () => setIsClosing(true);
 const handleAnimationEnd = () => { if (isClosing) onClose(); };
 
-const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+// ★修正: Supabase Storageへのアップロード処理
+const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 const file = e.target.files?.[0];
 if (!file) return;
-const localUrl = URL.createObjectURL(file);
-setImage(localUrl);
+
+    setIsUploadingImage(true);
+    try {
+      const publicUrl = await uploadRecipeImage(file);
+      if (publicUrl) {
+        setImage(publicUrl);
+      } else {
+        alert('画像のアップロードに失敗しました');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('画像アップロード中にエラーが発生しました');
+    } finally {
+      setIsUploadingImage(false);
+      e.target.value = ''; // 同じ画像を再度選べるようにリセット
+    }
+
 };
 
 const handleAddIngredient = () => {
@@ -654,9 +673,14 @@ onAnimationEnd={handleAnimationEnd} >
             <div>
               <h3 className="text-[14px] font-bold border-l-[4px] border-main-green pl-2 mb-2">レシピ画像</h3>
               <div className="flex flex-col gap-2 items-start">
-                 <label className={actionButtonClass}>
-                  <span className="text-[16px] leading-none">+</span> アップロード
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                 {/* ★修正: ローディング状態を追加した画像アップロードボタン */}
+                 <label className={`${actionButtonClass} ${isUploadingImage ? 'opacity-50 cursor-wait' : ''}`}>
+                  {isUploadingImage ? (
+                    <span className="text-[14px] leading-none py-[1px]">アップロード中...</span>
+                  ) : (
+                    <><span className="text-[16px] leading-none">+</span> アップロード</>
+                  )}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploadingImage} />
                  </label>
                  {image && (
                    <div className="flex items-center gap-2 mt-1">
@@ -1069,7 +1093,7 @@ className="flex-1 bg-white border border-main-green rounded-sm px-3 py-2 text-[1
 ## STEP 8: 動作確認
 
 1. **画面遷移とUIの確認:** レシピ一覧画面から「レシピ追加」ボタンを押下し、ポップアップが開くことを確認します。セレクトボックスやラジオボタンなどのUIが共通モジュールになっており、各テキスト入力枠の線が緑色（border-main-green）に統一されていることを確認します。
-2. **画像アップロードの確認:** 「＋アップロード」ボタンを押し、ローカルの画像ファイルが選択でき、画像のサムネイルと「✓ 画像選択済み」の表示が画面上に反映されることを確認します。
+2. **画像アップロードと公開URLの確認:** 「＋アップロード」ボタンを押し、ローカルの画像ファイルが選択でき、画像のサムネイルと「✓ 画像選択済み」の表示が反映されることを確認します。登録後、PCとスマホの両方でその画像が正しく表示される（Supabase Storageの公開URLが発行されている）ことを確認します。
 3. **材料・道具の追加・削除の確認:** セレクトボックスを展開し、マスタデータ（シードで投入した「にんじん」「包丁」など）が選択できることを確認します。項目を選び（材料は分量も入力し）「＋追加する」ボタンを押すと、下部にリストとして追加され、削除ボタンで消えることを確認します。
 4. **作り方の追加・編集・削除と改行の確認:** 作り方のテキストエリアに改行を含めてテキストを入力し「＋追加する」ボタンを押すと、下部にリスト（連番付き）が生成され、改行が保持されて表示されることを確認します。
 5. **作り方の編集とボタン非活性の確認:** 追加された作り方の「編集」ボタンを押し、表示の高さが変わらずにテキストエリアに切り替わることを確認します。文字を完全に空にすると「完了」ボタンが半透明になり押せなくなること、入力すると再度押せるようになることを確認します。

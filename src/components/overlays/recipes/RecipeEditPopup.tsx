@@ -5,6 +5,8 @@ import RadioButton from '@/components/ui/RadioButton';
 import CheckboxButton from '@/components/ui/CheckboxButton';
 import SelectBox from '@/components/ui/SelectBox';
 import MiniButton from '@/components/ui/MiniButton';
+// ★追加: フェーズ1で作成した画像アップロード関数をインポート
+import { uploadRecipeImage } from '@/utils/uploadImage';
 
 type MasterData = {
   ingredients: { id: number; name: string }[];
@@ -45,6 +47,7 @@ export default function RecipeEditPopup({
   const [isClosing, setIsClosing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const [masters, setMasters] = useState<MasterData>({
     ingredients: [],
@@ -112,11 +115,26 @@ export default function RecipeEditPopup({
     if (isClosing) onClose();
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ★修正: Supabase Storageへのアップロード処理
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const localUrl = URL.createObjectURL(file);
-    setImage(localUrl);
+
+    setIsUploadingImage(true);
+    try {
+      const publicUrl = await uploadRecipeImage(file);
+      if (publicUrl) {
+        setImage(publicUrl);
+      } else {
+        alert('画像のアップロードに失敗しました');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('画像アップロード中にエラーが発生しました');
+    } finally {
+      setIsUploadingImage(false);
+      e.target.value = ''; // 同じ画像を再度選べるようにリセット
+    }
   };
 
   const handleAddIngredient = () => {
@@ -264,14 +282,26 @@ export default function RecipeEditPopup({
                 レシピ画像
               </h3>
               <div className="flex flex-col items-start gap-2">
-                <label className={actionButtonClass}>
-                  <span className="text-[16px] leading-none">+</span>{' '}
-                  アップロード
+                {/* ★修正: ローディング状態を追加した画像アップロードボタン */}
+                <label
+                  className={`${actionButtonClass} ${isUploadingImage ? 'cursor-wait opacity-50' : ''}`}
+                >
+                  {isUploadingImage ? (
+                    <span className="py-[1px] text-[14px] leading-none">
+                      アップロード中...
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-[16px] leading-none">+</span>{' '}
+                      アップロード
+                    </>
+                  )}
                   <input
                     type="file"
                     accept="image/*"
                     className="hidden"
                     onChange={handleImageUpload}
+                    disabled={isUploadingImage}
                   />
                 </label>
                 {image && (
