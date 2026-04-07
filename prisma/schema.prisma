@@ -55,10 +55,11 @@ model RecipeTag {
   @@map("recipes_tags")
 }
 model RecipeIngredient {
-  recipes_id     Int
+  recipes_id Int
   ingredients_id Int
-  recipe         Recipe     @relation(fields: [recipes_id], references: [id])
-  ingredient     Ingredient @relation(fields: [ingredients_id], references: [id])
+  amount String? @db.VarChar(255)
+  recipe Recipe @relation(fields: [recipes_id], references: [id])
+  ingredient Ingredient @relation(fields: [ingredients_id], references: [id])
   @@id([recipes_id, ingredients_id])
   @@map("recipes_ingredients")
 }

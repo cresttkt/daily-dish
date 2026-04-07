@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import CheckboxButton from '@/components/ui/CheckboxButton';
 import RecipeDetailPopup from '@/components/overlays/recipes/RecipeDetailPopup';
+import RecipeEditPopup from '@/components/overlays/recipes/RecipeEditPopup';
 
 export type Recipe = {
   id: string;
@@ -24,6 +25,7 @@ export default function RecipesPage() {
 
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [isAddPopupOpen, setIsAddPopupOpen] = useState(false);
+  const [editRecipeId, setEditRecipeId] = useState<string | null>(null);
 
   const fetchRecipes = async () => {
     setIsLoading(true);
@@ -72,7 +74,7 @@ export default function RecipesPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="レシピ名で検索"
-            className="border-normal-gray focus:border-main-green flex-1 rounded-sm border bg-white px-3 py-2 text-[14px] outline-none"
+            className="border-main-green focus:ring-main-green text-main-font flex-1 rounded-sm border bg-white px-3 py-2 text-[14px] outline-none focus:ring-1"
           />
           <button className="bg-main-green rounded-sm px-5 py-2 text-[14px] font-bold text-white shadow-sm active:translate-y-[1px]">
             検索
@@ -88,7 +90,7 @@ export default function RecipesPage() {
                 onClick={() => setSelectedCategory(cat)}
                 className={`flex-1 rounded-sm border py-1.5 text-[12px] font-bold transition-colors ${
                   isSelected
-                    ? 'bg-normal-gray border-normal-gray text-white'
+                    ? 'bg-main-green border-main-green text-white'
                     : 'border-normal-gray bg-white text-gray-500'
                 }`}
               >
@@ -195,11 +197,30 @@ export default function RecipesPage() {
           recipeId={selectedRecipeId}
           onClose={() => setSelectedRecipeId(null)}
           onEdit={(id) => {
-            alert('編集機能はフェーズ4で実装します！');
+            setEditRecipeId(id);
+            setSelectedRecipeId(null);
           }}
           onDeleteSuccess={() => {
             setSelectedRecipeId(null);
-            fetchRecipes(); // 削除後に一覧データを再取得して画面を更新
+            fetchRecipes();
+          }}
+        />
+      )}
+
+      {(isAddPopupOpen || editRecipeId) && (
+        <RecipeEditPopup
+          recipeId={editRecipeId || undefined}
+          onClose={() => {
+            setIsAddPopupOpen(false);
+            setEditRecipeId(null);
+          }}
+          onSuccess={(type, newId) => {
+            setIsAddPopupOpen(false);
+            setEditRecipeId(null);
+            fetchRecipes();
+            if (type === 'edit' && newId) {
+              setSelectedRecipeId(newId);
+            }
           }}
         />
       )}

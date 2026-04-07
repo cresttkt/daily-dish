@@ -5,12 +5,13 @@ import { useState, useEffect } from 'react';
 type RecipeDetail = {
   id: string;
   category: string;
+  categoryName: string;
   name: string;
   image: string;
-  ingredients: string[];
-  tools: string[];
+  ingredients: { id: number; name: string; amount: string }[];
+  tools: { id: number; name: string }[];
   how_to_make: string[];
-  tags: string[];
+  tags: { id: number; name: string }[];
 };
 
 type Props = {
@@ -36,10 +37,7 @@ export default function RecipeDetailPopup({
     const fetchDetail = async () => {
       try {
         const res = await fetch(`/api/recipes/${recipeId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setRecipe(data);
-        }
+        if (res.ok) setRecipe(await res.json());
       } catch (err) {
         console.error(err);
       } finally {
@@ -67,7 +65,6 @@ export default function RecipeDetailPopup({
         setShowDeleteConfirm(false);
       }
     } catch (err) {
-      console.error(err);
       alert('通信エラーが発生しました');
       setIsDeleting(false);
       setShowDeleteConfirm(false);
@@ -79,7 +76,6 @@ export default function RecipeDetailPopup({
       className={`fixed top-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 z-[70] flex flex-col bg-white shadow-lg ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}
       onAnimationEnd={handleAnimationEnd}
     >
-      {/* 削除確認モーダル */}
       {showDeleteConfirm && (
         <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
           <div className="animate-scale-in-center flex w-full max-w-sm flex-col items-center rounded-md bg-white p-6 shadow-xl">
@@ -115,7 +111,6 @@ export default function RecipeDetailPopup({
         </div>
       )}
 
-      {/* ヘッダー */}
       <div className="border-normal-gray relative z-10 flex h-14 shrink-0 items-center border-b bg-white px-4">
         <button
           onClick={handleCloseClick}
@@ -143,7 +138,6 @@ export default function RecipeDetailPopup({
         </h2>
       </div>
 
-      {/* メインコンテンツ */}
       <div className="bg-thin-gray flex-1 overflow-y-auto p-4">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
@@ -151,10 +145,9 @@ export default function RecipeDetailPopup({
           </div>
         ) : recipe ? (
           <div className="border-thin-gray overflow-hidden rounded-md border bg-white shadow-sm">
-            {/* 画像エリア */}
             <div className="border-thin-gray relative flex aspect-[4/3] items-center justify-center border-b bg-white p-4">
               <span className="absolute top-4 left-4 z-10 rounded-sm bg-gray-300 px-2 py-0.5 text-[12px] font-bold text-white">
-                {recipe.category}
+                {recipe.categoryName}
               </span>
               {recipe.image ? (
                 <img
@@ -170,7 +163,6 @@ export default function RecipeDetailPopup({
             </div>
 
             <div className="flex flex-col gap-6 p-4">
-              {/* 材料 */}
               <div>
                 <h3 className="border-main-green text-main-font mb-2 border-l-[4px] pl-2 text-[16px] font-bold">
                   材料
@@ -179,7 +171,9 @@ export default function RecipeDetailPopup({
                 <ul className="text-main-font flex flex-col gap-1 pl-1 text-[14px]">
                   {recipe.ingredients.length > 0 ? (
                     recipe.ingredients.map((item, idx) => (
-                      <li key={idx}>・ {item}</li>
+                      <li key={idx}>
+                        ・ {item.name} {item.amount ? `（${item.amount}）` : ''}
+                      </li>
                     ))
                   ) : (
                     <li className="text-gray-400">登録なし</li>
@@ -187,7 +181,6 @@ export default function RecipeDetailPopup({
                 </ul>
               </div>
 
-              {/* 道具 */}
               <div>
                 <h3 className="border-main-green text-main-font mb-2 border-l-[4px] pl-2 text-[16px] font-bold">
                   道具
@@ -196,7 +189,7 @@ export default function RecipeDetailPopup({
                 <ul className="text-main-font flex flex-col gap-1 pl-1 text-[14px]">
                   {recipe.tools.length > 0 ? (
                     recipe.tools.map((item, idx) => (
-                      <li key={idx}>・ {item}</li>
+                      <li key={idx}>・ {item.name}</li>
                     ))
                   ) : (
                     <li className="text-gray-400">登録なし</li>
@@ -204,7 +197,6 @@ export default function RecipeDetailPopup({
                 </ul>
               </div>
 
-              {/* 作り方 */}
               <div>
                 <h3 className="border-main-green text-main-font mb-2 border-l-[4px] pl-2 text-[16px] font-bold">
                   作り方
@@ -213,9 +205,11 @@ export default function RecipeDetailPopup({
                 <ol className="text-main-font flex flex-col gap-2 pl-1 text-[14px]">
                   {recipe.how_to_make.length > 0 ? (
                     recipe.how_to_make.map((step, idx) => (
-                      <li key={idx} className="flex gap-2">
-                        <span className="font-bold">{idx + 1}.</span>
-                        <span className="flex-1">{step}</span>
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="shrink-0 font-bold">{idx + 1}.</span>
+                        <span className="flex-1 leading-relaxed break-words whitespace-pre-wrap">
+                          {step}
+                        </span>
                       </li>
                     ))
                   ) : (
@@ -224,14 +218,12 @@ export default function RecipeDetailPopup({
                 </ol>
               </div>
 
-              {/* タグ */}
               <div className="pt-2">
                 <p className="text-main-green text-[12px] leading-relaxed font-bold break-words">
-                  {recipe.tags.map((t) => `#${t}`).join(' ')}
+                  {recipe.tags.map((t) => `#${t.name}`).join(' ')}
                 </p>
               </div>
 
-              {/* ボタンエリア */}
               <div className="mt-2 flex gap-4 pt-4">
                 <button
                   onClick={() => onEdit(recipe.id)}

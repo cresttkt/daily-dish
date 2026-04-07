@@ -3,17 +3,16 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import 'dotenv/config';
 
-// シード投入などのコマンド実行時は、ポート5432の DIRECT_URL を使用します
 const connectionString = process.env.DIRECT_URL;
-
 if (!connectionString) {
   throw new Error('⚠️ .env ファイルに DIRECT_URL が設定されていません！');
 }
 
-const pool = new Pool({ connectionString });
+const pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+});
 const adapter = new PrismaPg(pool as any);
-
-// 空っぽだった PrismaClient() に、接続用のアダプターを渡します！
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -23,86 +22,51 @@ async function main() {
   await prisma.recipeTool.deleteMany();
   await prisma.recipe.deleteMany();
   await prisma.tag.deleteMany();
+  await prisma.ingredient.deleteMany();
+  await prisma.tool.deleteMany();
 
-  const tagHealthy = await prisma.tag.create({ data: { name: 'ヘルシー' } });
-  const tagEasy = await prisma.tag.create({ data: { name: '簡単' } });
-  const tagFast = await prisma.tag.create({ data: { name: '時短' } });
-  const tagMeat = await prisma.tag.create({ data: { name: '肉' } });
-  const tagFish = await prisma.tag.create({ data: { name: '魚' } });
-  const tagVeg = await prisma.tag.create({ data: { name: '野菜' } });
-  const tagSoup = await prisma.tag.create({ data: { name: '汁物' } });
-  const tagBento = await prisma.tag.create({ data: { name: 'お弁当' } });
-  const tagJapanese = await prisma.tag.create({ data: { name: '和食' } });
-  const tagChinese = await prisma.tag.create({ data: { name: '中華' } });
+  const tags = await Promise.all(
+    [
+      'ヘルシー',
+      '簡単',
+      '時短',
+      '肉',
+      '魚',
+      '野菜',
+      '汁物',
+      'お弁当',
+      '和食',
+      '中華',
+    ].map((name) => prisma.tag.create({ data: { name } })),
+  );
+  const ingredients = await Promise.all(
+    [
+      'にんじん',
+      '玉ねぎ',
+      'じゃがいも',
+      '豚肉',
+      '鶏肉',
+      '鮭',
+      'ほうれん草',
+      '豆腐',
+      'わかめ',
+      'ご飯',
+    ].map((name) => prisma.ingredient.create({ data: { name } })),
+  );
+  const tools = await Promise.all(
+    [
+      '包丁',
+      'まな板',
+      'フライパン',
+      '鍋',
+      'ボウル',
+      'ざる',
+      '計量スプーン',
+      '炊飯器',
+    ].map((name) => prisma.tool.create({ data: { name } })),
+  );
 
-  await prisma.recipe.create({
-    data: {
-      name: '鶏胸肉のオイマヨ炒め',
-      category: '2',
-      tags: { create: [{ tags_id: tagFast.id }, { tags_id: tagMeat.id }] },
-    },
-  });
-
-  await prisma.recipe.create({
-    data: {
-      name: '白ご飯',
-      category: '1',
-      tags: { create: [{ tags_id: tagEasy.id }, { tags_id: tagJapanese.id }] },
-    },
-  });
-
-  await prisma.recipe.create({
-    data: {
-      name: 'ほうれん草の胡麻和え',
-      category: '3',
-      tags: {
-        create: [
-          { tags_id: tagHealthy.id },
-          { tags_id: tagVeg.id },
-          { tags_id: tagEasy.id },
-        ],
-      },
-    },
-  });
-
-  await prisma.recipe.create({
-    data: {
-      name: '豆腐とわかめの味噌汁',
-      category: '4',
-      tags: {
-        create: [
-          { tags_id: tagEasy.id },
-          { tags_id: tagJapanese.id },
-          { tags_id: tagHealthy.id },
-          { tags_id: tagSoup.id },
-        ],
-      },
-    },
-  });
-
-  await prisma.recipe.create({
-    data: {
-      name: '鮭の塩焼き',
-      category: '2',
-      tags: {
-        create: [
-          { tags_id: tagEasy.id },
-          { tags_id: tagFish.id },
-          { tags_id: tagJapanese.id },
-        ],
-      },
-    },
-  });
-
-  await prisma.recipe.create({
-    data: {
-      name: 'チャーハン',
-      category: '1',
-      tags: { create: [{ tags_id: tagFast.id }, { tags_id: tagChinese.id }] },
-    },
-  });
-
-  console.log('✅ テスト用レシピ・タグの投入が完了しました！');
+  console.log('✅ テスト用マスタデータの投入が完了しました！');
 }
 
 main()
