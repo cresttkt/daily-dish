@@ -7,6 +7,8 @@ import SelectBox from '@/components/ui/SelectBox';
 import MiniButton from '@/components/ui/MiniButton';
 // ★追加: フェーズ1で作成した画像アップロード関数をインポート
 import { uploadRecipeImage } from '@/utils/uploadImage';
+import MasterEditPopup from '@/components/overlays/stocks/MasterEditPopup';
+import TagManagePopup from '@/components/overlays/stocks/TagManagePopup';
 
 type MasterData = {
   ingredients: { id: number; name: string }[];
@@ -73,6 +75,11 @@ export default function RecipeEditPopup({
 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isTagExpanded, setIsTagExpanded] = useState(false);
+  const [masterPopupConfig, setMasterPopupConfig] = useState<{
+    isOpen: boolean;
+    type: 'ingredients' | 'tools';
+  } | null>(null);
+  const [isTagPopupOpen, setIsTagPopupOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -172,9 +179,6 @@ export default function RecipeEditPopup({
       prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
     );
   };
-
-  const handleMasterAlert = () =>
-    alert('マスタ管理画面への遷移は後続フェーズで実装します');
 
   const handleSave = async () => {
     if (!name.trim() || !categoryName) {
@@ -344,7 +348,9 @@ export default function RecipeEditPopup({
                   材料
                 </h3>
                 <button
-                  onClick={handleMasterAlert}
+                  onClick={() =>
+                    setMasterPopupConfig({ isOpen: true, type: 'ingredients' })
+                  }
                   className="bg-main-green rounded-sm px-2 py-1 text-[10px] font-bold text-white"
                 >
                   ＋ 新規追加
@@ -412,7 +418,9 @@ export default function RecipeEditPopup({
                   道具
                 </h3>
                 <button
-                  onClick={handleMasterAlert}
+                  onClick={() =>
+                    setMasterPopupConfig({ isOpen: true, type: 'tools' })
+                  }
                   className="bg-main-green rounded-sm px-2 py-1 text-[10px] font-bold text-white"
                 >
                   ＋ 新規追加
@@ -548,7 +556,7 @@ export default function RecipeEditPopup({
                   タグ
                 </h3>
                 <button
-                  onClick={handleMasterAlert}
+                  onClick={() => setIsTagPopupOpen(true)}
                   className="bg-main-green rounded-sm px-2 py-1 text-[10px] font-bold text-white"
                 >
                   ＋ 新規追加
@@ -622,6 +630,34 @@ export default function RecipeEditPopup({
           )}
         </button>
       </div>
+      {masterPopupConfig?.isOpen && (
+        <MasterEditPopup
+          type={masterPopupConfig.type}
+          initialData={null}
+          onClose={() => setMasterPopupConfig(null)}
+          onSuccess={() => {
+            setMasterPopupConfig(null);
+            // マスタ追加後は、プルダウンの選択肢を最新化するためにAPIを再実行
+            fetch('/api/master')
+              .then((r) => r.json())
+              .then(setMasters);
+          }}
+          isNested={true}
+        />
+      )}
+
+      {isTagPopupOpen && (
+        <TagManagePopup
+          onClose={() => setIsTagPopupOpen(false)}
+          onSuccess={() => {
+            // タグ編集後は、一覧を最新化するためにAPIを再実行
+            fetch('/api/master')
+              .then((r) => r.json())
+              .then(setMasters);
+          }}
+          isNested={true}
+        />
+      )}
     </div>
   );
 }
